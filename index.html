@@ -13,30 +13,33 @@
     }
     .board {
       display: grid;
-      grid-template-columns: repeat(8, 60px);
-      grid-template-rows: repeat(8, 60px);
+      width: 100vw;
+      max-width: 480px;
+      aspect-ratio: 1 / 1;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
       gap: 0;
     }
     .cell {
-      width: 60px;
-      height: 60px;
+      width: 100%;
+      height: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
+      font-size: clamp(14px, 3vw, 24px);
       font-weight: bold;
     }
     .light { background: #eee; }
     .dark { background: #555; }
     .piece {
-      width: 50px;
-      height: 50px;
+      width: 90%;
+      height: 90%;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
       color: white;
-      font-size: 16px;
+      font-size: clamp(12px, 3vw, 20px);
       cursor: pointer;
     }
     .piece img {
@@ -63,6 +66,9 @@
     .instructions {
       width: 480px;
       margin-top: 10px;
+    }
+    .piece.dragging {
+      opacity: 0.5;
     }
   </style>
 </head>

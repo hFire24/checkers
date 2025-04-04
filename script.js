@@ -103,6 +103,28 @@ function createPiece(player, info) {
   div.dataset.player = player;
   div.setAttribute('draggable', true);
   div.addEventListener('dragstart', (e) => handleDragStart(e, div));
+  // ✨ Touch support
+  div.addEventListener('touchstart', (e) => {
+    const touch = e.touches[0];
+    div.dataset.touchStartX = touch.clientX;
+    div.dataset.touchStartY = touch.clientY;
+    div.classList.add('dragging');
+    preventTouchScroll(true);
+  }, { passive: true });  
+
+  div.addEventListener('touchend', (e) => {
+    div.classList.remove('dragging');
+    preventTouchScroll(false);
+    const touch = e.changedTouches[0];
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (target && target.classList.contains('cell')) {
+      const fromX = div.parentElement.dataset.x;
+      const fromY = div.parentElement.dataset.y;
+      const toX = target.dataset.x;
+      const toY = target.dataset.y;
+      tryMove(+fromX, +fromY, +toX, +toY);
+    }
+  });
   return div;
 }
 
@@ -222,8 +244,15 @@ function switchPlayer() {
   logEvent(`Current turn: ${currentPlayer.toUpperCase()}`);
 }
 
+function preventTouchScroll(enabled) {
+  if (enabled) {
+    document.body.style.overflow = 'hidden';
+  } else {
+    document.body.style.overflow = '';
+  }
+}
+
 initBoard();
-twemoji.parse(document.getElementById('board'));
 logEvent(`Current turn: ${currentPlayer.toUpperCase()}`);
 document.getElementById('resetButton').addEventListener('click', () => {
   initBoard();
