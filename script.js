@@ -161,11 +161,12 @@ function tryMove(fromX, fromY, toX, toY) {
   const validDirection = piece.king || (piece.player === 'maid' && dy === -1) || (piece.player === 'eurovision' && dy === 1);
 
   const destCell = document.querySelector(`.cell[data-x='${toX}'][data-y='${toY}']`);
-  if (!destCell || destCell.children.length > 0) return;
+  if (!destCell || destCell.children.length > 0) return false;
 
   if (Math.abs(dx) === 1 && Math.abs(dy) === 1 && validDirection && !forcedPiece) {
-    movePiece(fromX, fromY, toX, toY);
+    const wasCrowned = movePiece(fromX, fromY, toX, toY);
     switchPlayer();
+    return wasCrowned;
   } else if (Math.abs(dx) === 2 && Math.abs(dy) === 2) {
     const midX = fromX + dx / 2;
     const midY = fromY + dy / 2;
@@ -176,16 +177,19 @@ function tryMove(fromX, fromY, toX, toY) {
       midCell.innerHTML = '';
       logEvent(`${pieceNames[`${fromX},${fromY}`]} took down ${pieceNames[`${midX},${midY}`]}!`);
       delete pieceNames[`${midX},${midY}`];
-      movePiece(fromX, fromY, toX, toY);
+      const wasCrowned = movePiece(fromX, fromY, toX, toY);
 
-      if (!maybeKing(toX, toY) && hasAnotherJump(toX, toY)) {
+      if (!wasCrowned && hasAnotherJump(toX, toY)) {
         forcedPiece = document.querySelector(`.cell[data-x='${toX}'][data-y='${toY}'] .piece`);
-        return;
+        return false;
       }
       forcedPiece = null;
       switchPlayer();
+      return wasCrowned;
     }
   }
+
+  return false;
 }
 
 function hasAnotherJump(x, y) {
@@ -223,7 +227,8 @@ function movePiece(fromX, fromY, toX, toY) {
   toCell.appendChild(pieceDiv);
   pieceNames[`${toX},${toY}`] = pieceNames[`${fromX},${fromY}`];
   delete pieceNames[`${fromX},${fromY}`];
-  maybeKing(toX, toY);
+  const wasCrowned = maybeKing(toX, toY);
+  return wasCrowned;
 }
 
 function maybeKing(x, y) {
@@ -242,6 +247,10 @@ function maybeKing(x, y) {
 function switchPlayer() {
   currentPlayer = currentPlayer === 'maid' ? 'eurovision' : 'maid';
   logEvent(`Current turn: ${currentPlayer.toUpperCase()}`);
+
+  if (currentPlayer === 'eurovision') {
+    makeCpuMove();
+  }
 }
 
 function preventTouchScroll(enabled) {
@@ -250,6 +259,75 @@ function preventTouchScroll(enabled) {
   } else {
     document.body.style.overflow = '';
   }
+}
+
+function makeCpuMove(forcedX = null, forcedY = null) {
+  if (currentPlayer !== 'eurovision') return;
+
+  const moves = [];
+
+  for (let y = 0; y < tileSize; y++) {
+    for (let x = 0; x < tileSize; x++) {
+      const piece = board[y][x];
+      if (!piece || piece.player !== 'eurovision') continue;
+      if (forcedX !== null && (x !== forcedX || y !== forcedY)) continue;
+
+      const dirs = piece.king ? [[1,1],[1,-1],[-1,1],[-1,-1]] : [[1,1],[-1,1]];
+      for (const [dx, dy] of dirs) {
+        const jumpX = x + dx * 2;
+        const jumpY = y + dy * 2;
+        const midX = x + dx;
+        const midY = y + dy;
+
+        if (
+          jumpX >= 0 && jumpX < tileSize &&
+          jumpY >= 0 && jumpY < tileSize &&
+          board[jumpY][jumpX] === null &&
+          board[midY] && board[midY][midX] &&
+          board[midY][midX].player === 'maid'
+        ) {
+          moves.push({ fromX: x, fromY: y, toX: jumpX, toY: jumpY, jump: true });
+        }
+      }
+    }
+  }
+
+  if (moves.length === 0 && forcedX === null) {
+    // No jumps? Look for regular moves
+    for (let y = 0; y < tileSize; y++) {
+      for (let x = 0; x < tileSize; x++) {
+        const piece = board[y][x];
+        if (!piece || piece.player !== 'eurovision') continue;
+
+        const dirs = piece.king ? [[1,1],[1,-1],[-1,1],[-1,-1]] : [[1,1],[-1,1]];
+        for (const [dx, dy] of dirs) {
+          const toX = x + dx;
+          const toY = y + dy;
+          if (
+            toX >= 0 && toX < tileSize &&
+            toY >= 0 && toY < tileSize &&
+            board[toY][toX] === null
+          ) {
+            moves.push({ fromX: x, fromY: y, toX, toY, jump: false });
+          }
+        }
+      }
+    }
+  }
+
+  if (moves.length === 0) {
+    logEvent("Eurovision has no valid moves.");
+    return;
+  }
+
+  const move = moves[Math.floor(Math.random() * moves.length)];
+  setTimeout(() => {
+    const wasCrowned = tryMove(move.fromX, move.fromY, move.toX, move.toY);
+
+    if (move.jump && !wasCrowned) {
+      setTimeout(() => makeCpuMove(move.toX, move.toY), 600);
+    }
+  }, 500);
 }
 
 initBoard();
