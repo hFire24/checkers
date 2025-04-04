@@ -5,6 +5,8 @@ const tileSize = 8;
 let board = [];
 let pieceNames = {};
 let currentPlayer = 'maid';
+let moveCounter = 0;
+let aggressiveMode = false;
 let selectedPiece = null;
 let forcedPiece = null;
 
@@ -165,6 +167,7 @@ function tryMove(fromX, fromY, toX, toY) {
 
   if (Math.abs(dx) === 1 && Math.abs(dy) === 1 && validDirection && !forcedPiece) {
     const wasCrowned = movePiece(fromX, fromY, toX, toY);
+    if (wasCrowned) moveCounter = 0;
     switchPlayer();
     return wasCrowned;
   } else if (Math.abs(dx) === 2 && Math.abs(dy) === 2) {
@@ -178,6 +181,7 @@ function tryMove(fromX, fromY, toX, toY) {
       logEvent(`${pieceNames[`${fromX},${fromY}`]} took down ${pieceNames[`${midX},${midY}`]}!`);
       delete pieceNames[`${midX},${midY}`];
       const wasCrowned = movePiece(fromX, fromY, toX, toY);
+      moveCounter = 0;
 
       if (!wasCrowned && hasAnotherJump(toX, toY)) {
         forcedPiece = document.querySelector(`.cell[data-x='${toX}'][data-y='${toY}'] .piece`);
@@ -247,6 +251,19 @@ function maybeKing(x, y) {
 function switchPlayer() {
   currentPlayer = currentPlayer === 'maid' ? 'eurovision' : 'maid';
   logEvent(`Current turn: ${currentPlayer.toUpperCase()}`);
+
+  if (currentPlayer === 'maid') {
+    moveCounter++;
+    if (moveCounter >= 20 && !aggressiveMode) {
+      aggressiveMode = true;
+      logEvent("Aggressive Mode activated! CPU will stop playing it safe. 😈");
+    }
+    if (moveCounter >= 40) {
+      logEvent("Draw! No one has won after 40 moves.");
+      currentPlayer = null;
+      return;
+    }
+  }
 
   if (currentPlayer === 'eurovision') {
     makeCpuMove();
@@ -320,7 +337,32 @@ function makeCpuMove(forcedX = null, forcedY = null) {
     return;
   }
 
-  const move = moves[Math.floor(Math.random() * moves.length)];
+  // Assign a score to each move
+  for (const move of moves) {
+    let score = 0;
+
+    // 1. Jumping is better than regular moves
+    if (move.jump) score += 100;
+
+    // 2. Moving into last row = become a king!
+    if (move.toY === tileSize - 1) score += 50;
+
+    // 3. Avoid danger: penalize if the destination could be captured
+    if (!aggressiveMode && !isOneVsOne() && isDangerous(move.toX, move.toY, 'eurovision')) {
+      score -= 30;
+    }
+
+    // 4. Prefer staying near allies
+    score += countAlliesAround(move.toX, move.toY, 'eurovision') * 5;
+
+    move.score = score;
+  }
+
+  // Sort by best score
+  moves.sort((a, b) => b.score - a.score);
+  const topMoves = moves.filter(m => m.score === moves[0].score);
+  const move = topMoves[Math.floor(Math.random() * topMoves.length)];
+
   setTimeout(() => {
     const wasCrowned = tryMove(move.fromX, move.fromY, move.toX, move.toY);
 
@@ -330,10 +372,73 @@ function makeCpuMove(forcedX = null, forcedY = null) {
   }, 500);
 }
 
+function isDangerous(x, y, player) {
+  const directions = [
+    [-1, -1], [1, -1],
+    [-1, 1], [1, 1]
+  ];
+  for (const [dx, dy] of directions) {
+    const enemyX = x + dx;
+    const enemyY = y + dy;
+    const behindX = x - dx;
+    const behindY = y - dy;
+    if (
+      enemyX >= 0 && enemyX < tileSize &&
+      enemyY >= 0 && enemyY < tileSize &&
+      behindX >= 0 && behindX < tileSize &&
+      behindY >= 0 && behindY < tileSize
+    ) {
+      const enemy = board[enemyY][enemyX];
+      if (enemy && enemy.player !== player && board[behindY][behindX] === null) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function countAlliesAround(x, y, player) {
+  const directions = [
+    [-1, -1], [1, -1],
+    [-1, 1], [1, 1]
+  ];
+  let count = 0;
+  for (const [dx, dy] of directions) {
+    const nx = x + dx;
+    const ny = y + dy;
+    if (
+      nx >= 0 && nx < tileSize &&
+      ny >= 0 && ny < tileSize &&
+      board[ny][nx] &&
+      board[ny][nx].player === player
+    ) {
+      count++;
+    }
+  }
+  return count;
+}
+
+function isOneVsOne() {
+  let maidCount = 0;
+  let euroCount = 0;
+  for (let y = 0; y < tileSize; y++) {
+    for (let x = 0; x < tileSize; x++) {
+      const piece = board[y][x];
+      if (piece) {
+        if (piece.player === 'maid') maidCount++;
+        if (piece.player === 'eurovision') euroCount++;
+      }
+    }
+  }
+  return maidCount === 1 && euroCount === 1;
+}
+
 initBoard();
 logEvent(`Current turn: ${currentPlayer.toUpperCase()}`);
 document.getElementById('resetButton').addEventListener('click', () => {
   initBoard();
   currentPlayer = 'maid';
+  moveCounter = 0;
+  aggressiveMode = false;
   logEvent(`Game reset. Current turn: ${currentPlayer.toUpperCase()}`);
 });
